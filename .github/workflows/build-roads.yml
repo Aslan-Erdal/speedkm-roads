@@ -1,0 +1,72 @@
+name: Données routières
+
+# Régénère les données (routes et limitations d'OpenStreetMap) et les publie sur
+# GitHub Pages : le 1er de chaque mois, ou à la demande (onglet Actions).
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 1 * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Outils
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y osmium-tool
+          pip install -r requirements.txt
+
+      - name: Tests du générateur
+        run: python -m unittest -v test_build_roadtiles
+
+      - name: Télécharger et filtrer les routes
+        run: |
+          mkdir -p work
+          grep -v '^[[:space:]]*#' regions.txt | grep -v '^[[:space:]]*$' | while read -r region; do
+            name="$(basename "$region")"
+            echo "::group::$region"
+            curl -fsSL --retry 3 -o "work/$name.osm.pbf" "https://download.geofabrik.de/$region-latest.osm.pbf"
+            # Seulement les routes carrossables (et leurs nœuds) : divise la taille par ~10.
+            osmium tags-filter "work/$name.osm.pbf" \
+              w/highway=motorway,trunk,primary,secondary,tertiary,unclassified,residential,living_street,motorway_link,trunk_link,primary_link,secondary_link,tertiary_link \
+              -o "work/$name.roads.pbf" --overwrite
+            rm "work/$name.osm.pbf"
+            echo "::endgroup::"
+          done
+
+      - name: Générer les blocs
+        run: python build_roadtiles.py --out site work/*.roads.pbf
+
+      - name: Taille publiée
+        run: du -sh site && cat site/index.json
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

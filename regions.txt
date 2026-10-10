@@ -1,0 +1,7 @@
+# Régions Geofabrik à publier, une par ligne (https://download.geofabrik.de/europe/france.html).
+# Le chemin est celui de la page de la région, sans « -latest.osm.pbf ».
+# Île-de-France : ~8 Mo publiés. France entière (europe/france) : ~150 Mo estimés.
+europe/france/ile-de-france
+# europe/france/bretagne
+# europe/france/provence-alpes-cote-d-azur
+# europe/france
